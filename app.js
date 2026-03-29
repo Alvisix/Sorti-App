@@ -1,6 +1,10 @@
 (() => {
     const $ = (id) => document.getElementById(id);
 
+  const API_BASE = (window.SORTI_API_BASE || "").replace(/\/$/, "");
+  const USE_SSE = !!window.SORTI_USE_SSE;
+  const apiUrl = (path) => API_BASE ? `${API_BASE}${path}` : path;
+
   const LS_DEV = "SORTI_DEV_MODE";
   const isDevMode = () => (localStorage.getItem(LS_DEV) === "1");
 
@@ -299,7 +303,7 @@
 
       const capacity_g = Math.round(kg * 1000);
 
-      await fetchJSON(`/api/bins/${encodeURIComponent(binId)}/config`, {
+      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/config`), {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": adminKey() },
         body: JSON.stringify({ capacity_g })
@@ -319,7 +323,7 @@
       const ok = confirm(`Confermi svuotamento ${binId}?\n(Azzera solo il peso bin, non cancella eventi)`);
       if (!ok) return;
 
-      await fetchJSON(`/api/bins/${encodeURIComponent(binId)}/empty`, {
+      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/empty`), {
         method: "POST",
         headers: { "X-API-Key": adminKey() }
       });
@@ -724,7 +728,7 @@
 
   async function fetchDashboard(days) {
     const d = Math.max(1, Math.min(365, Number(days || 30)));
-    const url = `/api/dashboard?days=${encodeURIComponent(d)}&events_limit=20`;
+    const url = apiUrl(`/api/dashboard?days=${encodeURIComponent(d)}&events_limit=20`);
     const headers = {};
     if (adminKey()) headers["X-API-Key"] = adminKey();
     return await fetchJSON(url, { headers });
@@ -732,7 +736,7 @@
 
   async function fetchBinDetail(binId, days, eventsLimit = 20) {
     const d = Math.max(1, Math.min(365, Number(days || 30)));
-    const url = `/api/bins/${encodeURIComponent(binId)}?days=${encodeURIComponent(d)}&events_limit=${encodeURIComponent(eventsLimit)}`;
+    const url = apiUrl(`/api/bins/${encodeURIComponent(binId)}?days=${encodeURIComponent(d)}&events_limit=${encodeURIComponent(eventsLimit)}`);
     const headers = {};
     if (adminKey()) headers["X-API-Key"] = adminKey();
     return await fetchJSON(url, { headers });
@@ -745,11 +749,16 @@
   }
 
   function startSSE() {
+    if (!USE_SSE) {
+      startPollingFallback();
+      return;
+    }
+
     try {
       if (es) es.close();
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 
-      es = new EventSource("/api/stream");
+      es = new EventSource(apiUrl("/api/stream"));
 
       es.addEventListener("hello", () => {
         setLive("Realtime", "realtime");
@@ -1318,7 +1327,7 @@
           const w = Number($("simW").value || 0);
           if (!bin || !mat || !w) return alert("Compila bin_id, materiale e grammi.");
 
-          const resp = await fetchJSON("/api/event", {
+          const resp = await fetchJSON(apiUrl("/api/event"), {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Ingest-Key": ingestKey() },
             body: JSON.stringify({ bin_id: bin, material: mat, weight_g: w, source: "simulator" })
@@ -1348,7 +1357,7 @@
     $("btnExportEvents").onclick = async () => {
       try {
         if (!adminKey()) return alert("Manca Admin key.");
-        await downloadFile("/api/export/events.csv", "sorti_events.csv", { "X-API-Key": adminKey() });
+        await downloadFile(apiUrl("/api/export/events.csv"), "sorti_events.csv", { "X-API-Key": adminKey() });
       } catch (e) {
         alert("Errore export eventi:\n\n" + (e?.message || String(e)));
       }
@@ -1358,7 +1367,7 @@
       try {
         if (!adminKey()) return alert("Manca Admin key.");
         const d = Math.max(1, Math.min(365, Number($("exportDays").value || 30)));
-        await downloadFile(`/api/export/daily.csv?days=${d}`, `sorti_daily_${d}d.csv`, { "X-API-Key": adminKey() });
+        await downloadFile(apiUrl(`/api/export/daily.csv?days=${d}`), `sorti_daily_${d}d.csv`, { "X-API-Key": adminKey() });
       } catch (e) {
         alert("Errore export daily:\n\n" + (e?.message || String(e)));
       }
