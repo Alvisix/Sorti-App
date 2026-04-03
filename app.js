@@ -418,51 +418,67 @@
     `;
   }
 
-  function renderQuickAlerts(bins) {
-    const warn = thresholds.warn;
-    const crit = thresholds.critical;
+function renderQuickAlerts(bins){
+  const warn = thresholds.warn;
+  const crit = thresholds.critical;
 
-    const criticalBins = bins.filter(b => getFillPercent(b) >= crit);
-    const warnBins = bins.filter(b => getFillPercent(b) >= warn && getFillPercent(b) < crit);
+  const criticalCompartments = [];
+  const warnCompartments = [];
 
-    const summary = $("alertSummary");
-    if (summary) {
-      if (criticalBins.length > 0) {
-        summary.className = "chip bad";
-        summary.textContent = `${criticalBins.length} critici`;
-      } else if (warnBins.length > 0) {
-        summary.className = "chip warn";
-        summary.textContent = `${warnBins.length} warning`;
-      } else {
-        summary.className = "chip ok";
-        summary.textContent = "0";
+  for (const b of bins) {
+    const comps = Array.isArray(b.compartments) ? b.compartments : [];
+
+    for (const c of comps) {
+      const fill = Number(c?.sensor_fill_percent ?? 0);
+      const item = {
+        bin_id: b.bin_id,
+        compartment_id: c.compartment_id,
+        label: c.label || `Scomparto ${c.compartment_id}`,
+        fill
+      };
+
+      if (fill >= crit) {
+        criticalCompartments.push(item);
+      } else if (fill >= warn) {
+        warnCompartments.push(item);
       }
     }
-
-    const list = $("alertsList");
-    const totalAlerts = criticalBins.length + warnBins.length;
-    if (!list) return;
-
-    if (totalAlerts === 0) {
-      list.style.display = "none";
-      list.textContent = "";
-      return;
-    }
-
-    const items = [
-      ...criticalBins.map(b => ({ ...b, _p: "crit" })),
-      ...warnBins.map(b => ({ ...b, _p: "warn" })),
-    ].sort((a, b) => getFillPercent(b) - getFillPercent(a));
-
-    const lines = items.slice(0, 8).map(b => {
-      const f = Math.round(getFillPercent(b));
-      const tag = b._p === "crit" ? "CRITICO" : "WARNING";
-      return `• ${tag} — ${b.bin_id} (${f}%)`;
-    }).join("\n");
-
-    list.style.display = "block";
-    list.textContent = `Da attenzionare:\n${lines}`;
   }
+
+  const summary = $("alertSummary");
+  const totalAlerts = criticalCompartments.length + warnCompartments.length;
+
+  if (criticalCompartments.length > 0){
+    summary.className = "chip bad";
+    summary.textContent = `${criticalCompartments.length} critici`;
+  } else if (warnCompartments.length > 0){
+    summary.className = "chip warn";
+    summary.textContent = `${warnCompartments.length} warning`;
+  } else {
+    summary.className = "chip ok";
+    summary.textContent = "0";
+  }
+
+  const list = $("alertsList");
+  if (totalAlerts === 0){
+    list.style.display = "none";
+    list.textContent = "";
+    return;
+  }
+
+  const items = [
+    ...criticalCompartments.map(x => ({ ...x, _p: "crit" })),
+    ...warnCompartments.map(x => ({ ...x, _p: "warn" })),
+  ].sort((a, b) => b.fill - a.fill);
+
+  const lines = items.slice(0, 8).map(x => {
+    const tag = x._p === "crit" ? "CRITICO" : "WARNING";
+    return `• ${tag} — ${x.bin_id} / ${x.label} (${Math.round(x.fill)}%)`;
+  }).join("\n");
+
+  list.style.display = "block";
+  list.textContent = `Da attenzionare:\n${lines}`;
+}
 
   function touchBinRow(binId, isoTs) {
     if (!binId) return;
