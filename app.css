@@ -441,3 +441,43 @@ tbody tr.priWarn td:first-child{ border-left-color: rgba(247,201,72,.95); }
   border-radius:999px;
   transition: width .25s ease;
 }
+
+/* Custom Modal */
+.customModal {
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(10,18,32,.96);
+  border-radius: 18px;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,.75);
+  color: var(--txt);
+  width: min(400px, 90vw);
+  backdrop-filter: blur(12px);
+  margin: auto;
+}
+
+.customModal::backdrop {
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(5px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.customModal .modalHeader {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+}
+
+.customModal .modalMessage {
+  font-size: 14px; line-height: 1.5; color: var(--muted); white-space: pre-wrap; margin-bottom: 16px;
+}
+
+.customModal input {
+  width: 100%; margin-bottom: 16px; display: none;
+}
+
+.customModal .modalActions {
+  display: flex; justify-content: flex-end; gap: 10px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
