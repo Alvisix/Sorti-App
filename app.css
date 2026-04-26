@@ -330,9 +330,7 @@ tbody tr.priWarn td:first-child{ border-left-color: rgba(247,201,72,.95); }
 .binCardFillLeft{
   display:flex; align-items:center; gap:10px; flex-wrap:wrap;
 }
-.binCardActions{
-  display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;
-}
+
 
 .drawerOverlay{
   position:fixed; inset:0;
