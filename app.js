@@ -1,5 +1,5 @@
 (() => {
-    const $ = (id) => document.getElementById(id);
+  const $ = (id) => document.getElementById(id);
 
   const API_BASE = (window.SORTI_API_BASE || "").replace(/\/$/, "");
   const USE_SSE = !!window.SORTI_USE_SSE;
@@ -33,6 +33,61 @@
   let activeBinId = null;
   let ddLineChart = null;
   let ddPieChart = null;
+
+  // --- Gestione Modale Custom ---
+  function openModal({ type, message, title = "Avviso", defaultValue = "" }) {
+    return new Promise((resolve) => {
+      const modal = $("customModal");
+      const titleEl = $("modalTitle");
+      const msgEl = $("modalMessage");
+      const inputEl = $("modalInput");
+      const btnCancel = $("modalBtnCancel");
+      const btnOk = $("modalBtnOk");
+      const btnX = $("modalCloseX");
+
+      titleEl.textContent = title;
+      msgEl.textContent = message;
+
+      if (type === "prompt") {
+        inputEl.style.display = "block";
+        inputEl.value = defaultValue;
+        setTimeout(() => inputEl.focus(), 10);
+      } else {
+        inputEl.style.display = "none";
+        inputEl.value = "";
+      }
+
+      btnCancel.style.display = (type === "alert") ? "none" : "inline-block";
+
+      modal.showModal();
+
+      const cleanup = () => {
+        btnOk.onclick = null;
+        btnCancel.onclick = null;
+        btnX.onclick = null;
+        modal.close();
+      };
+
+      btnOk.onclick = () => {
+        const res = type === "prompt" ? inputEl.value : true;
+        cleanup();
+        resolve(res);
+      };
+
+      const cancelHandler = () => {
+        cleanup();
+        resolve(type === "prompt" ? null : false);
+      };
+
+      btnCancel.onclick = cancelHandler;
+      btnX.onclick = cancelHandler;
+      modal.oncancel = (e) => { e.preventDefault(); cancelHandler(); };
+    });
+  }
+
+  const customAlert = (msg, title) => openModal({ type: "alert", message: msg, title });
+  const customPrompt = (msg, def, title) => openModal({ type: "prompt", message: msg, defaultValue: def, title: title || "Inserimento" });
+  // ------------------------------
 
   function safeText(id, txt) {
     const el = $(id);
@@ -370,67 +425,67 @@
     `;
   }
 
-function renderQuickAlerts(bins){
-  const warn = thresholds.warn;
-  const crit = thresholds.critical;
+  function renderQuickAlerts(bins){
+    const warn = thresholds.warn;
+    const crit = thresholds.critical;
 
-  const criticalCompartments = [];
-  const warnCompartments = [];
+    const criticalCompartments = [];
+    const warnCompartments = [];
 
-  for (const b of bins) {
-    const comps = Array.isArray(b.compartments) ? b.compartments : [];
+    for (const b of bins) {
+      const comps = Array.isArray(b.compartments) ? b.compartments : [];
 
-    for (const c of comps) {
-      const fill = Number(c?.sensor_fill_percent ?? 0);
-      const item = {
-        bin_id: b.bin_id,
-        compartment_id: c.compartment_id,
-        label: c.label || `Scomparto ${c.compartment_id}`,
-        fill
-      };
+      for (const c of comps) {
+        const fill = Number(c?.sensor_fill_percent ?? 0);
+        const item = {
+          bin_id: b.bin_id,
+          compartment_id: c.compartment_id,
+          label: c.label || `Scomparto ${c.compartment_id}`,
+          fill
+        };
 
-      if (fill >= crit) {
-        criticalCompartments.push(item);
-      } else if (fill >= warn) {
-        warnCompartments.push(item);
+        if (fill >= crit) {
+          criticalCompartments.push(item);
+        } else if (fill >= warn) {
+          warnCompartments.push(item);
+        }
       }
     }
+
+    const summary = $("alertSummary");
+    const totalAlerts = criticalCompartments.length + warnCompartments.length;
+
+    if (criticalCompartments.length > 0){
+      summary.className = "chip bad";
+      summary.textContent = `${criticalCompartments.length} critici`;
+    } else if (warnCompartments.length > 0){
+      summary.className = "chip warn";
+      summary.textContent = `${warnCompartments.length} warning`;
+    } else {
+      summary.className = "chip ok";
+      summary.textContent = "0";
+    }
+
+    const list = $("alertsList");
+    if (totalAlerts === 0){
+      list.style.display = "none";
+      list.textContent = "";
+      return;
+    }
+
+    const items = [
+      ...criticalCompartments.map(x => ({ ...x, _p: "crit" })),
+      ...warnCompartments.map(x => ({ ...x, _p: "warn" })),
+    ].sort((a, b) => b.fill - a.fill);
+
+    const lines = items.slice(0, 8).map(x => {
+      const tag = x._p === "crit" ? "CRITICO" : "WARNING";
+      return `• ${tag} — ${x.bin_id} / ${x.label} (${Math.round(x.fill)}%)`;
+    }).join("\n");
+
+    list.style.display = "block";
+    list.textContent = `Da attenzionare:\n${lines}`;
   }
-
-  const summary = $("alertSummary");
-  const totalAlerts = criticalCompartments.length + warnCompartments.length;
-
-  if (criticalCompartments.length > 0){
-    summary.className = "chip bad";
-    summary.textContent = `${criticalCompartments.length} critici`;
-  } else if (warnCompartments.length > 0){
-    summary.className = "chip warn";
-    summary.textContent = `${warnCompartments.length} warning`;
-  } else {
-    summary.className = "chip ok";
-    summary.textContent = "0";
-  }
-
-  const list = $("alertsList");
-  if (totalAlerts === 0){
-    list.style.display = "none";
-    list.textContent = "";
-    return;
-  }
-
-  const items = [
-    ...criticalCompartments.map(x => ({ ...x, _p: "crit" })),
-    ...warnCompartments.map(x => ({ ...x, _p: "warn" })),
-  ].sort((a, b) => b.fill - a.fill);
-
-  const lines = items.slice(0, 8).map(x => {
-    const tag = x._p === "crit" ? "CRITICO" : "WARNING";
-    return `• ${tag} — ${x.bin_id} / ${x.label} (${Math.round(x.fill)}%)`;
-  }).join("\n");
-
-  list.style.display = "block";
-  list.textContent = `Da attenzionare:\n${lines}`;
-}
 
   function touchBinRow(binId, isoTs) {
     if (!binId) return;
@@ -895,7 +950,6 @@ function renderQuickAlerts(bins){
         openDrawer();
       }
 
-
       const data = await fetchBinDetail(binId, days, 20);
       const b = data?.bin || {};
 
@@ -1097,13 +1151,11 @@ function renderQuickAlerts(bins){
               ${compPreview}
             </td>
             <td data-col="last" class="muted" title="${escapeHtml(lastTitle)}">${lastHuman}</td>
-            <td style="text-align:right" onclick="event.stopPropagation()">
-            </td>
           </tr>
         `;
       }).join("");
 
-      safeHTML("binsBody", rowsHTML || `<tr><td colspan="6" class="muted">Nessun bin da mostrare (filtro attivo).</td></tr>`);
+      safeHTML("binsBody", rowsHTML || `<tr><td colspan="5" class="muted">Nessun bin da mostrare (filtro attivo).</td></tr>`);
 
       const cards = bins.map(b => {
         const fill = getFillPercent(b);
@@ -1149,11 +1201,6 @@ function renderQuickAlerts(bins){
 
             ${sensorMeta}
             ${compPreview}
-
-            <div class="sep" style="margin:10px 0"></div>
-
-            <div class="binCardActions" onclick="event.stopPropagation()">
-            </div>
           </div>
         `;
       }).join("");
@@ -1241,35 +1288,35 @@ function renderQuickAlerts(bins){
       devWrap.style.display = isDevMode() ? "block" : "none";
     }
 
-    $("btnSaveAdmin").onclick = () => {
+    $("btnSaveAdmin").onclick = async () => {
       const v = $("adminKeyInput").value.trim();
-      if (!v) return alert("Incolla la ADMIN key.");
+      if (!v) return await customAlert("Incolla la ADMIN key.", "Errore");
       localStorage.setItem(LS_ADMIN, v);
       $("adminKeyInput").value = "";
-      alert("Admin key salvata ✅");
+      await customAlert("Admin key salvata con successo ✅", "Successo");
       refresh();
       if (drawerOpen && activeBinId) openBinDrawer(activeBinId, { soft: true });
     };
 
-    $("btnSaveIngest").onclick = () => {
+    $("btnSaveIngest").onclick = async () => {
       const v = $("ingestKeyInput").value.trim();
-      if (!v) return alert("Incolla la INGEST key.");
+      if (!v) return await customAlert("Incolla la INGEST key.", "Errore");
       localStorage.setItem(LS_INGEST, v);
       $("ingestKeyInput").value = "";
-      alert("Ingest key salvata ✅");
+      await customAlert("Ingest key salvata con successo ✅", "Successo");
     };
 
-    $("btnEditThresholds").onclick = () => {
-      const w = prompt("Soglia WARNING (%):", String(thresholds.warn));
+    $("btnEditThresholds").onclick = async () => {
+      const w = await customPrompt("Imposta la soglia WARNING (%):", String(thresholds.warn), "Soglie Alert");
       if (w === null) return;
-      const c = prompt("Soglia CRITICAL (%):", String(thresholds.critical));
+      const c = await customPrompt("Imposta la soglia CRITICAL (%):", String(thresholds.critical), "Soglie Alert");
       if (c === null) return;
 
       const wn = Number(String(w).replace(",", ".").trim());
       const cn = Number(String(c).replace(",", ".").trim());
 
       if (!isFinite(wn) || !isFinite(cn) || wn <= 0 || cn <= 0 || wn >= cn || cn > 100) {
-        return alert("Valori non validi. Regola: 0 < warn < critical ≤ 100");
+        return await customAlert("Valori non validi.\nRegola: 0 < warn < critical ≤ 100", "Errore");
       }
       thresholds = { warn: wn, critical: cn };
       saveThresholds();
@@ -1281,13 +1328,13 @@ function renderQuickAlerts(bins){
     const btnSim = $("btnSimEvent");
     if (btnSim) {
       btnSim.onclick = async () => {
-        if (!isDevMode()) return alert("Simulatore disabilitato (non sei in DEV mode).");
+        if (!isDevMode()) return await customAlert("Simulatore disabilitato (non sei in DEV mode).", "Avviso");
         try {
-          if (!ingestKey()) return alert("Manca Ingest key (X-Ingest-Key).");
+          if (!ingestKey()) return await customAlert("Manca Ingest key (X-Ingest-Key).", "Errore");
           const bin = $("simBin").value.trim();
           const mat = $("simMat").value.trim();
           const w = Number($("simW").value || 0);
-          if (!bin || !mat || !w) return alert("Compila bin_id, materiale e grammi.");
+          if (!bin || !mat || !w) return await customAlert("Compila bin_id, materiale e grammi.", "Attenzione");
 
           const resp = await fetchJSON(apiUrl("/api/event"), {
             method: "POST",
@@ -1311,27 +1358,27 @@ function renderQuickAlerts(bins){
           await refresh();
         } catch (e) {
           if ($("simResult")) $("simResult").style.display = "none";
-          alert("Errore invio evento:\n\n" + (e?.message || String(e)));
+          await customAlert("Errore invio evento:\n\n" + (e?.message || String(e)), "Errore");
         }
       };
     }
 
     $("btnExportEvents").onclick = async () => {
       try {
-        if (!adminKey()) return alert("Manca Admin key.");
+        if (!adminKey()) return await customAlert("Manca Admin key.", "Errore");
         await downloadFile(apiUrl("/api/export/events.csv"), "sorti_events.csv", { "X-API-Key": adminKey() });
       } catch (e) {
-        alert("Errore export eventi:\n\n" + (e?.message || String(e)));
+        await customAlert("Errore export eventi:\n\n" + (e?.message || String(e)), "Errore");
       }
     };
 
     $("btnExportDaily").onclick = async () => {
       try {
-        if (!adminKey()) return alert("Manca Admin key.");
+        if (!adminKey()) return await customAlert("Manca Admin key.", "Errore");
         const d = Math.max(1, Math.min(365, Number($("exportDays").value || 30)));
         await downloadFile(apiUrl(`/api/export/daily.csv?days=${d}`), `sorti_daily_${d}d.csv`, { "X-API-Key": adminKey() });
       } catch (e) {
-        alert("Errore export daily:\n\n" + (e?.message || String(e)));
+        await customAlert("Errore export daily:\n\n" + (e?.message || String(e)), "Errore");
       }
     };
 
