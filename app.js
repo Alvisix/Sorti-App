@@ -288,54 +288,6 @@
     URL.revokeObjectURL(a.href);
   }
 
-  async function setCapacityKg(binId, currentCapacityG) {
-    try {
-      if (!adminKey()) return alert("Manca Admin key (X-API-Key).");
-
-      const curKg = (Number(currentCapacityG || 0) / 1000);
-      const proposed = (isFinite(curKg) && curKg > 0) ? curKg.toFixed(curKg < 100 ? 1 : 0) : "";
-      const input = prompt(`Imposta capacità per ${binId} (in kg):`, proposed);
-      if (input === null) return;
-
-      const kg = Number(String(input).replace(",", ".").trim());
-      if (!isFinite(kg) || kg <= 0) return alert("Valore non valido. Inserisci un numero > 0 (kg).");
-      if (kg > 10000) return alert("Valore troppo alto. Controlla (kg).");
-
-      const capacity_g = Math.round(kg * 1000);
-
-      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/config`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-API-Key": adminKey() },
-        body: JSON.stringify({ capacity_g })
-      });
-
-      await refresh();
-      if (drawerOpen && activeBinId === binId) await openBinDrawer(binId, { soft: true });
-    } catch (e) {
-      alert("Errore modifica capacità:\n\n" + (e?.message || String(e)));
-    }
-  }
-  window.setCapacityKg = setCapacityKg;
-
-  async function emptyBin(binId) {
-    try {
-      if (!adminKey()) return alert("Manca Admin key (X-API-Key).");
-      const ok = confirm(`Confermi svuotamento ${binId}?\n(Azzera solo il peso bin, non cancella eventi)`);
-      if (!ok) return;
-
-      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/empty`), {
-        method: "POST",
-        headers: { "X-API-Key": adminKey() }
-      });
-
-      await refresh();
-      if (drawerOpen && activeBinId === binId) await openBinDrawer(binId, { soft: true });
-    } catch (e) {
-      alert("Errore svuotamento:\n\n" + (e?.message || String(e)));
-    }
-  }
-  window.emptyBin = emptyBin;
-
   function barColor(fill) {
     const f = Number(fill || 0);
     if (f >= thresholds.critical) return "linear-gradient(90deg, rgba(255,93,93,.95), rgba(255,140,73,.95))";
@@ -943,8 +895,6 @@ function renderQuickAlerts(bins){
         openDrawer();
       }
 
-      $("ddBtnCapacity").onclick = () => setCapacityKg(binId, window.__lastCapGByBin?.[binId] || 0);
-      $("ddBtnEmpty").onclick = () => emptyBin(binId);
 
       const data = await fetchBinDetail(binId, days, 20);
       const b = data?.bin || {};
@@ -1148,8 +1098,6 @@ function renderQuickAlerts(bins){
             </td>
             <td data-col="last" class="muted" title="${escapeHtml(lastTitle)}">${lastHuman}</td>
             <td style="text-align:right" onclick="event.stopPropagation()">
-              <button class="btnGhost btnMini" onclick="setCapacityKg('${String(b.bin_id).replaceAll("'", "\\'")}', ${Number(b.capacity_g || 0)})">Capacità</button>
-              <button class="btnDanger btnMini" style="margin-left:8px" onclick="emptyBin('${String(b.bin_id).replaceAll("'", "\\'")}')">Svuota</button>
             </td>
           </tr>
         `;
@@ -1205,8 +1153,6 @@ function renderQuickAlerts(bins){
             <div class="sep" style="margin:10px 0"></div>
 
             <div class="binCardActions" onclick="event.stopPropagation()">
-              <button class="btnGhost btnMini" onclick="setCapacityKg('${String(b.bin_id).replaceAll("'", "\\'")}', ${capG})">Capacità</button>
-              <button class="btnDanger btnMini" onclick="emptyBin('${String(b.bin_id).replaceAll("'", "\\'")}')">Svuota</button>
             </div>
           </div>
         `;
