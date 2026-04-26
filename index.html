@@ -10,8 +10,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="./app.css?v=101">
 </head>
@@ -145,7 +144,6 @@
               <th>Capacità</th>
               <th>Riempimento</th>
               <th>Ultimo update</th>
-              <th style="text-align:right">Azioni</th>
             </tr>
           </thead>
           <tbody id="binsBody"></tbody>
@@ -238,9 +236,6 @@
 
       <div class="sep"></div>
 
-
-      <div class="sep"></div>
-
       <div class="cardHeader" style="padding:0; margin:0 0 8px">
         <div class="title">Scomparti</div>
         <div class="small muted">livello misurato dai sensori</div>
@@ -290,6 +285,18 @@
     </div>
   </aside>
 
+  <dialog id="customModal" class="customModal">
+    <div class="modalHeader">
+      <div id="modalTitle" class="title">Avviso</div>
+      <button id="modalCloseX" class="btnGhost btnMini" style="padding:4px 8px" aria-label="Chiudi">&times;</button>
+    </div>
+    <div id="modalMessage" class="modalMessage"></div>
+    <input type="text" id="modalInput" placeholder="Scrivi qui..." />
+    <div class="modalActions">
+      <button id="modalBtnCancel" class="btnGhost">Annulla</button>
+      <button id="modalBtnOk" class="btnPrimary">Conferma</button>
+    </div>
+  </dialog>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="./config.js?v=101"></script>
   <script src="./app.js?v=101"></script>
