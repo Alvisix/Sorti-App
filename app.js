@@ -1,6 +1,8 @@
 (() => {
     const $ = (id) => document.getElementById(id);
-
+    const API_BASE = (window.SORTI_API_BASE || "").replace(/\/$/, "");
+    const USE_SSE = !!window.SORTI_USE_SSE;
+    const apiUrl = (path) => API_BASE ? `${API_BASE}${path}` : path;
   const LS_DEV = "SORTI_DEV_MODE";
   const isDevMode = () => (localStorage.getItem(LS_DEV) === "1");
 
