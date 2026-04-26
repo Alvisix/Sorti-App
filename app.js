@@ -1,16 +1,6 @@
 (() => {
     const $ = (id) => document.getElementById(id);
 
-  const API_BASE = (window.SORTI_API_BASE || "").replace(/\/$/, "");
-  const USE_SSE = !!window.SORTI_USE_SSE;
-  const apiUrl = (path) => API_BASE ? `${API_BASE}${path}` : path;
-
-  function extraHeaders() {
-    return (window.SORTI_EXTRA_HEADERS && typeof window.SORTI_EXTRA_HEADERS === "object")
-      ? window.SORTI_EXTRA_HEADERS
-      : {};
-  }
-
   const LS_DEV = "SORTI_DEV_MODE";
   const isDevMode = () => (localStorage.getItem(LS_DEV) === "1");
 
@@ -264,7 +254,6 @@
   }
 
   async function fetchJSON(url, opts = {}) {
-    opts.headers = Object.assign({}, extraHeaders(), opts.headers || {});
     const res = await fetch(url, opts);
     const text = await res.text();
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}\n${text}`);
@@ -273,7 +262,7 @@
   }
 
   async function downloadFile(url, filename, headers) {
-    const res = await fetch(url, { headers: Object.assign({}, extraHeaders(), headers) });
+    const res = await fetch(url, { headers });
     if (!res.ok) {
       const t = await res.text();
       throw new Error(`${res.status} ${res.statusText}\n${t}`);
@@ -303,7 +292,7 @@
 
       const capacity_g = Math.round(kg * 1000);
 
-      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/config`), {
+      await fetchJSON(`/api/bins/${encodeURIComponent(binId)}/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": adminKey() },
         body: JSON.stringify({ capacity_g })
@@ -323,7 +312,7 @@
       const ok = confirm(`Confermi svuotamento ${binId}?\n(Azzera solo il peso bin, non cancella eventi)`);
       if (!ok) return;
 
-      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/empty`), {
+      await fetchJSON(`/api/bins/${encodeURIComponent(binId)}/empty`, {
         method: "POST",
         headers: { "X-API-Key": adminKey() }
       });
@@ -730,7 +719,7 @@
 
   async function fetchDashboard(days) {
     const d = Math.max(1, Math.min(365, Number(days || 30)));
-    const url = apiUrl(`/api/dashboard?days=${encodeURIComponent(d)}&events_limit=20`);
+    const url = `/api/dashboard?days=${encodeURIComponent(d)}&events_limit=20`;
     const headers = {};
     if (adminKey()) headers["X-API-Key"] = adminKey();
     return await fetchJSON(url, { headers });
@@ -738,7 +727,7 @@
 
   async function fetchBinDetail(binId, days, eventsLimit = 20) {
     const d = Math.max(1, Math.min(365, Number(days || 30)));
-    const url = apiUrl(`/api/bins/${encodeURIComponent(binId)}?days=${encodeURIComponent(d)}&events_limit=${encodeURIComponent(eventsLimit)}`);
+    const url = `/api/bins/${encodeURIComponent(binId)}?days=${encodeURIComponent(d)}&events_limit=${encodeURIComponent(eventsLimit)}`;
     const headers = {};
     if (adminKey()) headers["X-API-Key"] = adminKey();
     return await fetchJSON(url, { headers });
@@ -751,16 +740,11 @@
   }
 
   function startSSE() {
-    if (!USE_SSE) {
-      startPollingFallback();
-      return;
-    }
-
     try {
       if (es) es.close();
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 
-      es = new EventSource(apiUrl("/api/stream"));
+      es = new EventSource("/api/stream");
 
       es.addEventListener("hello", () => {
         setLive("Realtime", "realtime");
@@ -929,6 +913,9 @@
         ddSetLoading(binId);
         openDrawer();
       }
+
+      $("ddBtnCapacity").onclick = () => setCapacityKg(binId, window.__lastCapGByBin?.[binId] || 0);
+      $("ddBtnEmpty").onclick = () => emptyBin(binId);
 
       const data = await fetchBinDetail(binId, days, 20);
       const b = data?.bin || {};
@@ -1131,10 +1118,7 @@
               ${compPreview}
             </td>
             <td data-col="last" class="muted" title="${escapeHtml(lastTitle)}">${lastHuman}</td>
-            <td style="text-align:right" onclick="event.stopPropagation()">
-              <button class="btnGhost btnMini" onclick="setCapacityKg('${String(b.bin_id).replaceAll("'", "\\'")}', ${Number(b.capacity_g || 0)})">Capacità</button>
-              <button class="btnDanger btnMini" style="margin-left:8px" onclick="emptyBin('${String(b.bin_id).replaceAll("'", "\\'")}')">Svuota</button>
-            </td>
+            <td style="text-align:right"></td>
           </tr>
         `;
       }).join("");
@@ -1188,10 +1172,6 @@
 
             <div class="sep" style="margin:10px 0"></div>
 
-            <div class="binCardActions" onclick="event.stopPropagation()">
-              <button class="btnGhost btnMini" onclick="setCapacityKg('${String(b.bin_id).replaceAll("'", "\\'")}', ${capG})">Capacità</button>
-              <button class="btnDanger btnMini" onclick="emptyBin('${String(b.bin_id).replaceAll("'", "\\'")}')">Svuota</button>
-            </div>
           </div>
         `;
       }).join("");
@@ -1327,7 +1307,7 @@
           const w = Number($("simW").value || 0);
           if (!bin || !mat || !w) return alert("Compila bin_id, materiale e grammi.");
 
-          const resp = await fetchJSON(apiUrl("/api/event"), {
+          const resp = await fetchJSON("/api/event", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Ingest-Key": ingestKey() },
             body: JSON.stringify({ bin_id: bin, material: mat, weight_g: w, source: "simulator" })
@@ -1357,7 +1337,7 @@
     $("btnExportEvents").onclick = async () => {
       try {
         if (!adminKey()) return alert("Manca Admin key.");
-        await downloadFile(apiUrl("/api/export/events.csv"), "sorti_events.csv", { "X-API-Key": adminKey() });
+        await downloadFile("/api/export/events.csv", "sorti_events.csv", { "X-API-Key": adminKey() });
       } catch (e) {
         alert("Errore export eventi:\n\n" + (e?.message || String(e)));
       }
@@ -1367,7 +1347,7 @@
       try {
         if (!adminKey()) return alert("Manca Admin key.");
         const d = Math.max(1, Math.min(365, Number($("exportDays").value || 30)));
-        await downloadFile(apiUrl(`/api/export/daily.csv?days=${d}`), `sorti_daily_${d}d.csv`, { "X-API-Key": adminKey() });
+        await downloadFile(`/api/export/daily.csv?days=${d}`, `sorti_daily_${d}d.csv`, { "X-API-Key": adminKey() });
       } catch (e) {
         alert("Errore export daily:\n\n" + (e?.message || String(e)));
       }
