@@ -1,10 +1,6 @@
 (() => {
     const $ = (id) => document.getElementById(id);
 
-  const API_BASE = (window.SORTI_API_BASE || "").replace(/\/$/, "");
-  const USE_SSE = !!window.SORTI_USE_SSE;
-  const apiUrl = (path) => API_BASE ? `${API_BASE}${path}` : path;
-
   const LS_DEV = "SORTI_DEV_MODE";
   const isDevMode = () => (localStorage.getItem(LS_DEV) === "1");
 
@@ -257,14 +253,7 @@
     return { full, med, empty, fail, total: comps.length };
   }
 
-  function extraHeaders() {
-    return (window.SORTI_EXTRA_HEADERS && typeof window.SORTI_EXTRA_HEADERS === "object")
-      ? window.SORTI_EXTRA_HEADERS
-      : {};
-  }
-
   async function fetchJSON(url, opts = {}) {
-    opts.headers = Object.assign({}, extraHeaders(), opts.headers || {});
     const res = await fetch(url, opts);
     const text = await res.text();
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}\n${text}`);
@@ -273,7 +262,7 @@
   }
 
   async function downloadFile(url, filename, headers) {
-    const res = await fetch(url, { headers: Object.assign({}, extraHeaders(), headers) });
+    const res = await fetch(url, { headers });
     if (!res.ok) {
       const t = await res.text();
       throw new Error(`${res.status} ${res.statusText}\n${t}`);
@@ -303,7 +292,7 @@
 
       const capacity_g = Math.round(kg * 1000);
 
-      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/config`), {
+      await fetchJSON(`/api/bins/${encodeURIComponent(binId)}/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": adminKey() },
         body: JSON.stringify({ capacity_g })
@@ -323,7 +312,7 @@
       const ok = confirm(`Confermi svuotamento ${binId}?\n(Azzera solo il peso bin, non cancella eventi)`);
       if (!ok) return;
 
-      await fetchJSON(apiUrl(`/api/bins/${encodeURIComponent(binId)}/empty`), {
+      await fetchJSON(`/api/bins/${encodeURIComponent(binId)}/empty`, {
         method: "POST",
         headers: { "X-API-Key": adminKey() }
       });
@@ -407,7 +396,9 @@
                   <span class="fillPill">${escapeHtml(pct)}</span>
                 </div>
               </div>
-
+              <div style="margin-top:6px; color:rgba(255,255,255,.62); font-size:12px;">
+                Distanza: <b>${escapeHtml(formatDistanceCm(dist))}</b>
+              </div>
               <div style="margin-top:8px; height:10px; width:100%; border-radius:999px; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.05); overflow:hidden;">
                 <div style="height:100%; width:${barWidth}%; background:${barColor(fill ?? 0)};"></div>
               </div>
@@ -418,67 +409,51 @@
     `;
   }
 
-function renderQuickAlerts(bins){
-  const warn = thresholds.warn;
-  const crit = thresholds.critical;
+  function renderQuickAlerts(bins) {
+    const warn = thresholds.warn;
+    const crit = thresholds.critical;
 
-  const criticalCompartments = [];
-  const warnCompartments = [];
+    const criticalBins = bins.filter(b => getFillPercent(b) >= crit);
+    const warnBins = bins.filter(b => getFillPercent(b) >= warn && getFillPercent(b) < crit);
 
-  for (const b of bins) {
-    const comps = Array.isArray(b.compartments) ? b.compartments : [];
-
-    for (const c of comps) {
-      const fill = Number(c?.sensor_fill_percent ?? 0);
-      const item = {
-        bin_id: b.bin_id,
-        compartment_id: c.compartment_id,
-        label: c.label || `Scomparto ${c.compartment_id}`,
-        fill
-      };
-
-      if (fill >= crit) {
-        criticalCompartments.push(item);
-      } else if (fill >= warn) {
-        warnCompartments.push(item);
+    const summary = $("alertSummary");
+    if (summary) {
+      if (criticalBins.length > 0) {
+        summary.className = "chip bad";
+        summary.textContent = `${criticalBins.length} critici`;
+      } else if (warnBins.length > 0) {
+        summary.className = "chip warn";
+        summary.textContent = `${warnBins.length} warning`;
+      } else {
+        summary.className = "chip ok";
+        summary.textContent = "0";
       }
     }
+
+    const list = $("alertsList");
+    const totalAlerts = criticalBins.length + warnBins.length;
+    if (!list) return;
+
+    if (totalAlerts === 0) {
+      list.style.display = "none";
+      list.textContent = "";
+      return;
+    }
+
+    const items = [
+      ...criticalBins.map(b => ({ ...b, _p: "crit" })),
+      ...warnBins.map(b => ({ ...b, _p: "warn" })),
+    ].sort((a, b) => getFillPercent(b) - getFillPercent(a));
+
+    const lines = items.slice(0, 8).map(b => {
+      const f = Math.round(getFillPercent(b));
+      const tag = b._p === "crit" ? "CRITICO" : "WARNING";
+      return `• ${tag} — ${b.bin_id} (${f}%)`;
+    }).join("\n");
+
+    list.style.display = "block";
+    list.textContent = `Da attenzionare:\n${lines}`;
   }
-
-  const summary = $("alertSummary");
-  const totalAlerts = criticalCompartments.length + warnCompartments.length;
-
-  if (criticalCompartments.length > 0){
-    summary.className = "chip bad";
-    summary.textContent = `${criticalCompartments.length} critici`;
-  } else if (warnCompartments.length > 0){
-    summary.className = "chip warn";
-    summary.textContent = `${warnCompartments.length} warning`;
-  } else {
-    summary.className = "chip ok";
-    summary.textContent = "0";
-  }
-
-  const list = $("alertsList");
-  if (totalAlerts === 0){
-    list.style.display = "none";
-    list.textContent = "";
-    return;
-  }
-
-  const items = [
-    ...criticalCompartments.map(x => ({ ...x, _p: "crit" })),
-    ...warnCompartments.map(x => ({ ...x, _p: "warn" })),
-  ].sort((a, b) => b.fill - a.fill);
-
-  const lines = items.slice(0, 8).map(x => {
-    const tag = x._p === "crit" ? "CRITICO" : "WARNING";
-    return `• ${tag} — ${x.bin_id} / ${x.label} (${Math.round(x.fill)}%)`;
-  }).join("\n");
-
-  list.style.display = "block";
-  list.textContent = `Da attenzionare:\n${lines}`;
-}
 
   function touchBinRow(binId, isoTs) {
     if (!binId) return;
@@ -744,7 +719,7 @@ function renderQuickAlerts(bins){
 
   async function fetchDashboard(days) {
     const d = Math.max(1, Math.min(365, Number(days || 30)));
-    const url = apiUrl(`/api/dashboard?days=${encodeURIComponent(d)}&events_limit=20`);
+    const url = `/api/dashboard?days=${encodeURIComponent(d)}&events_limit=20`;
     const headers = {};
     if (adminKey()) headers["X-API-Key"] = adminKey();
     return await fetchJSON(url, { headers });
@@ -752,7 +727,7 @@ function renderQuickAlerts(bins){
 
   async function fetchBinDetail(binId, days, eventsLimit = 20) {
     const d = Math.max(1, Math.min(365, Number(days || 30)));
-    const url = apiUrl(`/api/bins/${encodeURIComponent(binId)}?days=${encodeURIComponent(d)}&events_limit=${encodeURIComponent(eventsLimit)}`);
+    const url = `/api/bins/${encodeURIComponent(binId)}?days=${encodeURIComponent(d)}&events_limit=${encodeURIComponent(eventsLimit)}`;
     const headers = {};
     if (adminKey()) headers["X-API-Key"] = adminKey();
     return await fetchJSON(url, { headers });
@@ -765,16 +740,11 @@ function renderQuickAlerts(bins){
   }
 
   function startSSE() {
-    if (!USE_SSE) {
-      startPollingFallback();
-      return;
-    }
-
     try {
       if (es) es.close();
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 
-      es = new EventSource(apiUrl("/api/stream"));
+      es = new EventSource("/api/stream");
 
       es.addEventListener("hello", () => {
         setLive("Realtime", "realtime");
@@ -923,6 +893,7 @@ function renderQuickAlerts(bins){
           <div class="compRow">
             ${badge}
             <span class="compTiny">Stato: <b>${escapeHtml(state || "—")}</b></span>
+            <span class="compTiny">Distanza: <b>${escapeHtml(formatDistanceCm(dist))}</b></span>
           </div>
 
           <div class="compBar">
@@ -1147,10 +1118,7 @@ function renderQuickAlerts(bins){
               ${compPreview}
             </td>
             <td data-col="last" class="muted" title="${escapeHtml(lastTitle)}">${lastHuman}</td>
-            <td style="text-align:right" onclick="event.stopPropagation()">
-              <button class="btnGhost btnMini" onclick="setCapacityKg('${String(b.bin_id).replaceAll("'", "\\'")}', ${Number(b.capacity_g || 0)})">Capacità</button>
-              <button class="btnDanger btnMini" style="margin-left:8px" onclick="emptyBin('${String(b.bin_id).replaceAll("'", "\\'")}')">Svuota</button>
-            </td>
+            <td style="text-align:right"></td>
           </tr>
         `;
       }).join("");
@@ -1204,10 +1172,6 @@ function renderQuickAlerts(bins){
 
             <div class="sep" style="margin:10px 0"></div>
 
-            <div class="binCardActions" onclick="event.stopPropagation()">
-              <button class="btnGhost btnMini" onclick="setCapacityKg('${String(b.bin_id).replaceAll("'", "\\'")}', ${capG})">Capacità</button>
-              <button class="btnDanger btnMini" onclick="emptyBin('${String(b.bin_id).replaceAll("'", "\\'")}')">Svuota</button>
-            </div>
           </div>
         `;
       }).join("");
@@ -1343,7 +1307,7 @@ function renderQuickAlerts(bins){
           const w = Number($("simW").value || 0);
           if (!bin || !mat || !w) return alert("Compila bin_id, materiale e grammi.");
 
-          const resp = await fetchJSON(apiUrl("/api/event"), {
+          const resp = await fetchJSON("/api/event", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Ingest-Key": ingestKey() },
             body: JSON.stringify({ bin_id: bin, material: mat, weight_g: w, source: "simulator" })
@@ -1373,7 +1337,7 @@ function renderQuickAlerts(bins){
     $("btnExportEvents").onclick = async () => {
       try {
         if (!adminKey()) return alert("Manca Admin key.");
-        await downloadFile(apiUrl("/api/export/events.csv"), "sorti_events.csv", { "X-API-Key": adminKey() });
+        await downloadFile("/api/export/events.csv", "sorti_events.csv", { "X-API-Key": adminKey() });
       } catch (e) {
         alert("Errore export eventi:\n\n" + (e?.message || String(e)));
       }
@@ -1383,7 +1347,7 @@ function renderQuickAlerts(bins){
       try {
         if (!adminKey()) return alert("Manca Admin key.");
         const d = Math.max(1, Math.min(365, Number($("exportDays").value || 30)));
-        await downloadFile(apiUrl(`/api/export/daily.csv?days=${d}`), `sorti_daily_${d}d.csv`, { "X-API-Key": adminKey() });
+        await downloadFile(`/api/export/daily.csv?days=${d}`, `sorti_daily_${d}d.csv`, { "X-API-Key": adminKey() });
       } catch (e) {
         alert("Errore export daily:\n\n" + (e?.message || String(e)));
       }
